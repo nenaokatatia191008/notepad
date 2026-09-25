@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notepad</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root{
+    --paper:#FAF8F3; --ink:#231F1A; --muted:#8B8375; --line:#E2DDD3;
+    --accent:#3A6B5C; --accent-light:#EAF1EE; --danger:#B3492E;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:'Inter',sans-serif;height:100vh;overflow:hidden;}
+  .app{display:flex;height:100vh;}
+  .sidebar{width:280px;border-right:1px solid var(--line);display:flex;flex-direction:column;}
+  .sidebar-header{padding:20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;}
+  .sidebar-header h1{font-family:'Source Serif 4',serif;font-size:20px;margin:0;font-weight:600;}
+  .new-btn{background:var(--accent);color:#fff;border:none;width:30px;height:30px;border-radius:6px;font-size:18px;cursor:pointer;line-height:1;}
+  .new-btn:hover{opacity:.9;}
+  .note-list{flex:1;overflow-y:auto;}
+  .note-item{padding:14px 20px;border-bottom:1px solid var(--line);cursor:pointer;}
+  .note-item:hover{background:var(--accent-light);}
+  .note-item.active{background:var(--accent-light);border-left:3px solid var(--accent);}
+  .note-item .title{font-weight:600;font-size:14px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .note-item .preview{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .main{flex:1;display:flex;flex-direction:column;}
+  .editor-top{padding:16px 40px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;}
+  .status{font-size:12px;color:var(--muted);}
+  .del-btn{background:none;border:1px solid var(--line);color:var(--danger);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px;}
+  .del-btn:hover{background:var(--danger);color:#fff;border-color:var(--danger);}
+  .editor{flex:1;padding:30px 40px;overflow-y:auto;}
+  #titleInput{width:100%;border:none;background:none;font-family:'Source Serif 4',serif;font-size:28px;font-weight:600;outline:none;margin-bottom:16px;}
+  #bodyInput{width:100%;height:calc(100% - 60px);border:none;background:none;resize:none;outline:none;font-size:15px;line-height:1.7;font-family:'Inter',sans-serif;color:var(--ink);}
+  .empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-family:'Source Serif 4',serif;font-size:18px;}
+  .config-banner{background:#FBEEEA;color:var(--danger);padding:10px 20px;font-size:13px;text-align:center;}
+  .auth-screen{height:100vh;display:flex;align-items:center;justify-content:center;}
+  .auth-box{width:320px;padding:32px;border:1px solid var(--line);border-radius:10px;}
+  .auth-box h1{font-family:'Source Serif 4',serif;font-size:24px;margin:0 0 20px;}
+  .auth-box input{width:100%;padding:10px 12px;margin-bottom:10px;border:1px solid var(--line);border-radius:6px;font-family:'Inter',sans-serif;font-size:14px;background:#fff;}
+  .auth-box button{width:100%;padding:10px;border:none;border-radius:6px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer;margin-top:4px;}
+  .auth-box button.secondary{background:none;color:var(--accent);text-decoration:underline;margin-top:10px;padding:0;}
+  .auth-msg{font-size:12px;color:var(--danger);min-height:16px;margin-top:6px;}
+  .signout-btn{background:none;border:1px solid var(--line);padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;color:var(--muted);}
+  .pin-dots{display:flex;gap:10px;justify-content:center;margin:20px 0;}
+  .pin-dots span{width:14px;height:14px;border-radius:50%;border:1px solid var(--line);background:#fff;}
+  .pin-dots span.filled{background:var(--accent);border-color:var(--accent);}
+  .pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .pin-pad button{padding:14px 0;font-size:18px;border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer;color:var(--ink);}
+  .pin-pad button:hover{background:var(--accent-light);}
+  .pin-pad button.wide{grid-column:span 1;}
+  .pin-sub{font-size:12px;color:var(--muted);text-align:center;margin-top:14px;}
+  .pin-sub a{color:var(--accent);cursor:pointer;}
+</style>
+</head>
+<body>
+<div id="pinScreen" class="auth-screen" style="display:none">
+  <div class="auth-box">
+    <h1 id="pinTitle">Masukkan PIN</h1>
+    <div class="pin-dots" id="pinDots"></div>
+    <div class="pin-pad" id="pinPad"></div>
+    <div class="auth-msg" id="pinMsg" style="text-align:center"></div>
+    <div class="pin-sub" id="pinForgot" style="display:none">Lupa PIN? <a onclick="forgotPin()">Keluar &amp; atur ulang</a></div>
+  </div>
+</div>
+<div id="authScreen" class="auth-screen" style="display:none">
+  <div class="auth-box">
+    <h1>Notepad</h1>
+    <input id="authEmail" type="email" placeholder="Email">
+    <input id="authPass" type="password" placeholder="Kata sandi">
+    <button onclick="doLogin()">Masuk</button>
+    <button class="secondary" onclick="doSignup()">Belum punya akun? Daftar</button>
+    <div class="auth-msg" id="authMsg"></div>
+  </div>
+</div>
+<div class="app" id="app" style="display:none">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h1>Notepad</h1>
+      <button class="new-btn" onclick="createNote()">+</button>
+    </div>
+    <div class="note-list" id="noteList"></div>
+  </div>
+  <div class="main">
+    <div class="editor-top">
+      <span class="status" id="status">Memuat…</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="del-btn" onclick="deleteNote()" id="delBtn" style="display:none">Hapus</button>
+        <button class="signout-btn" onclick="lockApp()">🔒 Kunci</button>
+        <button class="signout-btn" onclick="doSignout()">Keluar</button>
+      </div>
+    </div>
+    <div class="editor" id="editorWrap">
+      <div class="empty">Pilih atau buat catatan baru</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Isi dengan URL dan anon key project Supabase kamu (Settings > API)
+const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";
+
+const configured = !SUPABASE_URL.includes("YOUR-PROJECT");
+let sb, notes = [], activeId = null, saveTimer = null;
+
+if (configured) {
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} else {
+  document.body.insertAdjacentHTML('afterbegin',
+    '<div class="config-banner">Belum dikonfigurasi: isi SUPABASE_URL &amp; SUPABASE_ANON_KEY di index.html (baris di bawah &lt;script&gt;), lalu muat ulang halaman.</div>');
+}
+
+async function loadNotes(){
+  if(!configured) return;
+  setStatus("Memuat…");
+  const { data, error } = await sb.from('notes').select('*').order('updated_at', { ascending:false });
+  if (error) { setStatus("Gagal memuat: "+error.message); return; }
+  notes = data;
+  renderList();
+  setStatus("Tersinkron");
+}
+
+function renderList(){
+  const list = document.getElementById('noteList');
+  list.innerHTML = notes.map(n => `
+    <div class="note-item ${n.id===activeId?'active':''}" onclick="openNote('${n.id}')">
+      <div class="title">${escapeHtml(n.title || 'Tanpa judul')}</div>
+      <div class="preview">${escapeHtml((n.body||'').slice(0,60))}</div>
+    </div>`).join('') || '<div style="padding:20px;color:var(--muted);font-size:13px">Belum ada catatan</div>';
+}
+
+function openNote(id){
+  activeId = id;
+  const n = notes.find(x=>x.id===id);
+  renderList();
+  document.getElementById('delBtn').style.display = 'inline-block';
+  document.getElementById('editorWrap').innerHTML = `
+    <input id="titleInput" placeholder="Judul" value="${escapeAttr(n.title||'')}">
+    <textarea id="bodyInput" placeholder="Tulis catatan…">${escapeHtml(n.body||'')}</textarea>`;
+  document.getElementById('titleInput').oninput = scheduleSave;
+  document.getElementById('bodyInput').oninput = scheduleSave;
+}
+
+function scheduleSave(){
+  setStatus("Menyimpan…");
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNote, 500);
+}
+
+async function saveNote(){
+  const title = document.getElementById('titleInput').value;
+  const body = document.getElementById('bodyInput').value;
+  const { error } = await sb.from('notes').update({ title, body, updated_at: new Date().toISOString() }).eq('id', activeId);
+  const n = notes.find(x=>x.id===activeId);
+  if(n){ n.title=title; n.body=body; }
+  renderList();
+  setStatus(error ? "Gagal menyimpan" : "Tersimpan");
+}
+
+async function createNote(){
+  const { data: { user } } = await sb.auth.getUser();
+  const { data, error } = await sb.from('notes').insert({ title:'Catatan baru', body:'', user_id:user.id }).select().single();
+  if (error) { setStatus("Gagal membuat: "+error.message); return; }
+  notes.unshift(data);
+  openNote(data.id);
+}
+
+async function deleteNote(){
+  if(!activeId || !confirm('Hapus catatan ini?')) return;
+  await sb.from('notes').delete().eq('id', activeId);
+  notes = notes.filter(n=>n.id!==activeId);
+  activeId = null;
+  document.getElementById('delBtn').style.display='none';
+  document.getElementById('editorWrap').innerHTML = '<div class="empty">Pilih atau buat catatan baru</div>';
+  renderList();
+}
+
+function setStatus(t){ document.getElementById('status').textContent = t; }
+function escapeHtml(s){ return (s||'').replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function escapeAttr(s){ return escapeHtml(s).replace(/"/g,'&quot;'); }
+
+// --- Autentikasi (privat per pengguna) ---
+function authMsg(t){ document.getElementById('authMsg').textContent = t; }
+
+async function doLogin(){
+  authMsg('');
+  const email = document.getElementById('authEmail').value;
+  const password = document.getElementById('authPass').value;
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) authMsg(error.message);
+}
+
+async function doSignup(){
+  authMsg('');
+  const email = document.getElementById('authEmail').value;
+  const password = document.getElementById('authPass').value;
+  const { error } = await sb.auth.signUp({ email, password });
+  if (error) authMsg(error.message);
+  else authMsg('Cek email untuk konfirmasi (jika diaktifkan), lalu masuk.');
+}
+
+async function doSignout(){
+  await sb.auth.signOut();
+  notes = []; activeId = null;
+  showAuthScreen();
+}
+
+function showAuthScreen(){
+  document.getElementById('authScreen').style.display = 'flex';
+  document.getElementById('pinScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+}
+
+function showApp(){
+  document.getElementById('authScreen').style.display = 'none';
+  document.getElementById('pinScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  loadNotes();
+}
+
+async function initAuth(){
+  if(!configured){
+    showAuthScreen();
+    document.getElementById('authScreen').querySelector('.auth-box').innerHTML =
+      '<h1>Notepad</h1><p style="font-size:13px;color:var(--muted)">Belum tersambung ke Supabase. Isi SUPABASE_URL dan SUPABASE_ANON_KEY di index.html dulu.</p>';
+    return;
+  }
+  const { data:{ session } } = await sb.auth.getSession();
+  if (session) handlePinGate(session.user); else showAuthScreen();
+  sb.auth.onAuthStateChange((_event, session) => {
+    if (session) handlePinGate(session.user); else showAuthScreen();
+  });
+}
+
+initAuth();
+
+// --- Kunci PIN (lokal per perangkat, di atas login Supabase) ---
+let pendingUser = null, pinMode = null, pinValue = '';
+
+function pinKey(userId){ return 'notepad_pin_' + userId; }
+
+async function sha256(str){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+function handlePinGate(user){
+  pendingUser = user;
+  const hasPin = !!localStorage.getItem(pinKey(user.id));
+  pinMode = hasPin ? 'enter' : 'set-1';
+  pinValue = '';
+  renderPinScreen();
+}
+
+function lockApp(){
+  if(!pendingUser) return;
+  pinMode = 'enter';
+  pinValue = '';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('pinScreen').style.display = 'flex';
+  renderPinScreen();
+}
+
+function renderPinScreen(){
+  document.getElementById('authScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('pinScreen').style.display = 'flex';
+  const titles = { 'enter':'Masukkan PIN', 'set-1':'Buat PIN (4 digit)', 'set-2':'Ulangi PIN' };
+  document.getElementById('pinTitle').textContent = titles[pinMode];
+  document.getElementById('pinMsg').textContent = '';
+  document.getElementById('pinForgot').style.display = pinMode === 'enter' ? 'block' : 'none';
+  const dots = document.getElementById('pinDots');
+  dots.innerHTML = Array.from({length:4}, (_,i) =>
+    `<span class="${i < pinValue.length ? 'filled' : ''}"></span>`).join('');
+  const pad = document.getElementById('pinPad');
+  const keys = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
+  pad.innerHTML = keys.map(k => k === '' ? '<span></span>' : `<button onclick="pinKeyPress('${k}')">${k}</button>`).join('');
+}
+
+let firstPin = '';
+
+function pinKeyPress(k){
+  if(k === '⌫'){ pinValue = pinValue.slice(0,-1); renderPinScreen(); return; }
+  if(pinValue.length >= 4) return;
+  pinValue += k;
+  renderPinScreen();
+  if(pinValue.length === 4) setTimeout(submitPin, 150);
+}
+
+async function submitPin(){
+  if(pinMode === 'set-1'){
+    firstPin = pinValue;
+    pinMode = 'set-2';
+    pinValue = '';
+    renderPinScreen();
+    return;
+  }
+  if(pinMode === 'set-2'){
+    if(pinValue !== firstPin){
+      document.getElementById('pinMsg').textContent = 'PIN tidak sama, coba lagi';
+      pinMode = 'set-1'; pinValue = ''; firstPin='';
+      renderPinScreen();
+      return;
+    }
+    localStorage.setItem(pinKey(pendingUser.id), await sha256(pinValue));
+    showApp();
+    return;
+  }
+  // mode 'enter'
+  const hash = await sha256(pinValue);
+  if(hash === localStorage.getItem(pinKey(pendingUser.id))){
+    showApp();
+  } else {
+    document.getElementById('pinMsg').textContent = 'PIN salah, coba lagi';
+    pinValue = '';
+    renderPinScreen();
+  }
+}
+
+function forgotPin(){
+  if(pendingUser) localStorage.removeItem(pinKey(pendingUser.id));
+  doSignout();
+}
+</script>
+</body>
+</html>
